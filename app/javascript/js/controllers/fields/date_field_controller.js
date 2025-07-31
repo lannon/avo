@@ -101,6 +101,10 @@ export default class extends Controller {
     if (this.isOnShow || this.isOnIndex) {
       this.context.element.innerText = this.cachedInitialValue
     } else if (this.isOnEdit) {
+      // Clean up event listener
+      if (this.fakeInputTarget && this.onManualInput) {
+        this.fakeInputTarget.removeEventListener('input', this.onManualInput.bind(this))
+      }
       if (this.flatpickrInstance) this.flatpickrInstance.destroy()
     }
   }
@@ -173,6 +177,11 @@ export default class extends Controller {
 
     this.flatpickrInstance = flatpickr(this.fakeInputTarget, options)
 
+    // Add input event listener for manual date entry when allowInput is enabled
+    if (options.allowInput) {
+      this.fakeInputTarget.addEventListener('input', this.onManualInput.bind(this))
+    }
+
     // Don't try to parse the value if the input is empty.
     if (!this.initialValue) {
       return
@@ -200,11 +209,15 @@ export default class extends Controller {
     // No date has been selected
     if (selectedDates.length === 0) {
       this.updateRealInput('')
-
       return
     }
 
-    const timezonedDate = DateTime.fromISO(selectedDates[0].toISOString())
+    const parsedDate = DateTime.fromISO(selectedDates[0].toISOString())
+    this.processValidDate(parsedDate)
+  }
+
+  processValidDate(parsedDate) {
+    const timezonedDate = parsedDate
       .setZone(this.displayTimezone, { keepLocalTime: true })
       .setZone('UTC', { keepLocalTime: !this.relativeValue })
 
@@ -224,6 +237,45 @@ export default class extends Controller {
     }
 
     this.updateRealInput(value)
+  }
+
+  onManualInput(event) {
+    const inputValue = event.target.value.trim()
+
+    // If input is empty, clear the real input
+    if (!inputValue) {
+      this.updateRealInput('')
+      return
+    }
+
+    // Try to parse the manually entered date
+    let parsedDate
+    try {
+      // Attempt to parse manual input using ISO format
+      parsedDate = DateTime.fromISO(inputValue)
+
+      // If not a valid ISO date, try RFC 2822
+      if (!parsedDate.isValid) {
+        parsedDate = DateTime.fromRFC2822(inputValue)
+      }
+
+      // If still invalid, try flatpickr formats followed by common date formats
+      if (!parsedDate.isValid) {
+        const commonFormats = [this.formatValue, this.pickerFormatValue, 'yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd HH:mm', 'MM/dd/yyyy HH:mm']
+        for (const format of commonFormats) {
+          parsedDate = DateTime.fromFormat(inputValue, format)
+          if (parsedDate.isValid) break
+        }
+      }
+    } catch (error) {
+      // If parsing fails, don't update the real input
+      return
+    }
+
+    // Only update if we have a valid date
+    if (parsedDate.isValid) {
+      this.processValidDate(parsedDate)
+    }
   }
 
   // Value should be a string
