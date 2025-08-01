@@ -261,11 +261,20 @@ export default class extends Controller {
 
       // If still invalid, try flatpickr formats followed by common date formats
       if (!parsedDate.isValid) {
-        const commonFormats = [this.formatValue, this.pickerFormatValue, 'yyyy-MM-dd', 'MM/dd/yyyy', 'dd/MM/yyyy', 'yyyy-MM-dd HH:mm', 'MM/dd/yyyy HH:mm']
-        for (const format of commonFormats) {
+        const commonFormats = [
+          this.formatValue,
+          this.pickerFormatValue,
+          'yyyy-MM-dd',
+          'MM/dd/yyyy',
+          'dd/MM/yyyy',
+          'yyyy-MM-dd HH:mm',
+          'MM/dd/yyyy HH:mm',
+        ].filter((format) => format && typeof format === 'string')
+        commonFormats.some((format) => {
           parsedDate = DateTime.fromFormat(inputValue, format)
-          if (parsedDate.isValid) break
-        }
+
+          return parsedDate.isValid
+        })
       }
     } catch (error) {
       // If parsing fails, don't update the real input
